@@ -1,4 +1,4 @@
-# MFA Audit Script - Manual Execution
+# MFA Audit Script 
 # Purpose: Quickly identify high-risk users lacking MFA protection
 
 param(
@@ -35,7 +35,7 @@ try {
     
     Write-Host "   Found $($Users.Count) active users" -ForegroundColor Gray
     
-    # Get MFA sign-ins from last 30 days
+    # Get MFA sign-ins from last X days
     Write-Host "📊 Getting MFA usage data..." -ForegroundColor Yellow
     $CutoffDate = (Get-Date).AddDays(-$DaysBack)
     
@@ -62,47 +62,69 @@ try {
     }
     
     # Analyze each user
-    Write-Host "🔍 Analyzing users for MFA risk..." -ForegroundColor Yellow
+    Write-Host "🔍 Analyzing users for MFA enrollment and usage..." -ForegroundColor Yellow
     $Results = @()
     $HighRiskUsers = @()
+    $EnrollmentCheckSuccessful = 0
+    $EnrollmentCheckFailed = 0
     
     foreach ($User in $Users) {
-        # Try to get authentication methods
-        $HasMfaMethods = $false
+        # Check MFA enrollment using UserAuthenticationMethod.Read.All permission
+        $HasMfaEnrolled = "Unknown"
+        
         try {
-            $AuthMethods = Get-MgUserAuthenticationMethod -UserId $User.Id -ErrorAction SilentlyContinue
-            $NonPasswordMethods = $AuthMethods | Where-Object { 
+            # Get user's authentication methods
+            $AuthMethods = Get-MgUserAuthenticationMethod -UserId $User.Id -ErrorAction Stop
+            
+            # Filter out password methods to get only MFA methods
+            $MfaMethods = $AuthMethods | Where-Object { 
                 $_.AdditionalProperties.'@odata.type' -ne '#microsoft.graph.passwordAuthenticationMethod' 
             }
-            $HasMfaMethods = $NonPasswordMethods.Count -gt 0
+            
+            if ($MfaMethods.Count -gt 0) {
+                $HasMfaEnrolled = "Yes"
+                $EnrollmentCheckSuccessful++
+            } else {
+                $HasMfaEnrolled = "No"
+                $EnrollmentCheckSuccessful++
+            }
+            
         } catch {
-            # If we can't read auth methods, assume no MFA (conservative approach)
-            $HasMfaMethods = $false
+            # If we can't read auth methods, try to infer from sign-in history
+            $HasMfaEnrolled = "Cannot Verify"
+            $EnrollmentCheckFailed++
         }
         
         # Check recent MFA usage
         $UserMfaSignIns = $RecentMfaSignIns | Where-Object { $_.userPrincipalName -eq $User.UserPrincipalName }
         $HasRecentMfaUsage = $UserMfaSignIns.Count -gt 0
         
-        # Determine risk level
+        # Determine risk level with comprehensive logic
         $IsHighRisk = $false
         $RiskLevel = "Low"
         
-        if (-not $HasMfaMethods -and -not $HasRecentMfaUsage) {
+        # High Risk: Confirmed no MFA enrollment OR (can't verify enrollment AND no recent usage)
+        if ($HasMfaEnrolled -eq "No" -or ($HasMfaEnrolled -eq "Cannot Verify" -and -not $HasRecentMfaUsage)) {
             $IsHighRisk = $true
             $RiskLevel = "High"
-        } elseif (-not $HasRecentMfaUsage) {
+        }
+        # Medium Risk: Has MFA enrolled but not using it recently
+        elseif ($HasMfaEnrolled -eq "Yes" -and -not $HasRecentMfaUsage) {
             $RiskLevel = "Medium"
         }
+        # Low Risk: Recent MFA usage (regardless of enrollment status)
+        else {
+            $RiskLevel = "Low"
+        }
         
-        # Create result
+        # Create result with clear enrollment status
         $UserResult = [PSCustomObject]@{
             UserPrincipalName = $User.UserPrincipalName
             DisplayName = $User.DisplayName
             JobTitle = $User.JobTitle
             LastSignIn = $User.SignInActivity.LastSignInDateTime
-            HasMfaMethods = $HasMfaMethods
-            RecentMfaUsage = $HasRecentMfaUsage
+            HasMfaEnrolled = $HasMfaEnrolled  # Yes/No/Cannot Verify
+            MfaUsedLast30Days = $HasRecentMfaUsage
             MfaSignInCount = $UserMfaSignIns.Count
             RiskLevel = $RiskLevel
             IsHighRisk = $IsHighRisk
@@ -115,13 +137,14 @@ try {
         }
     }
     
-    # Calculate summary
+    # Calculate summary statistics
     $TotalUsers = $Results.Count
     $HighRiskCount = $HighRiskUsers.Count
     $MediumRiskCount = ($Results | Where-Object { $_.RiskLevel -eq "Medium" }).Count
     $LowRiskCount = ($Results | Where-Object { $_.RiskLevel -eq "Low" }).Count
-    $WithMfaMethods = ($Results | Where-Object { $_.HasMfaMethods -eq $true }).Count
-    $WithRecentUsage = ($Results | Where-Object { $_.RecentMfaUsage -eq $true }).Count
+    $WithMfaUsage = ($Results | Where-Object { $_.MfaUsedLast30Days -eq $true }).Count
+    $WithMfaEnrolled = ($Results | Where-Object { $_.HasMfaEnrolled -eq "Yes" }).Count
+    $CannotVerifyCount = ($Results | Where-Object { $_.HasMfaEnrolled -eq "Cannot Verify" }).Count
     
     # Display results
     Write-Host "`n" + "="*60 -ForegroundColor Cyan
@@ -131,10 +154,18 @@ try {
     
     Write-Host "📊 SUMMARY:" -ForegroundColor White
     Write-Host "   Total Active Users: $TotalUsers" -ForegroundColor White
-    Write-Host "   Users with MFA Methods: $WithMfaMethods ($([math]::Round(($WithMfaMethods/$TotalUsers)*100,1))%)" -ForegroundColor White
-    Write-Host "   Users with Recent MFA Usage: $WithRecentUsage ($([math]::Round(($WithRecentUsage/$TotalUsers)*100,1))%)" -ForegroundColor White
-    Write-Host ""
+    Write-Host "   Users with MFA Enrolled: $WithMfaEnrolled ($([math]::Round(($WithMfaEnrolled/$TotalUsers)*100,1))%)" -ForegroundColor White
+    Write-Host "   Users with Recent MFA Usage: $WithMfaUsage ($([math]::Round(($WithMfaUsage/$TotalUsers)*100,1))%)" -ForegroundColor White
     
+    # Show enrollment verification status
+    if ($EnrollmentCheckFailed -gt 0) {
+        Write-Host "   ⚠️  Enrollment Status Unknown: $CannotVerifyCount users" -ForegroundColor Yellow
+        Write-Host "      (Consider re-granting admin consent if this number is high)" -ForegroundColor Gray
+    } else {
+        Write-Host "   ✅ MFA Enrollment Status Verified: $EnrollmentCheckSuccessful users" -ForegroundColor Green
+    }
+    
+    Write-Host ""
     Write-Host "🎯 RISK BREAKDOWN:" -ForegroundColor White
     Write-Host "   🟢 Low Risk: $LowRiskCount ($([math]::Round(($LowRiskCount/$TotalUsers)*100,1))%)" -ForegroundColor Green
     Write-Host "   🟡 Medium Risk: $MediumRiskCount ($([math]::Round(($MediumRiskCount/$TotalUsers)*100,1))%)" -ForegroundColor Yellow
@@ -149,7 +180,8 @@ try {
             } else { 
                 "Never" 
             }
-            Write-Host "   • $($_.DisplayName) ($($_.UserPrincipalName)) - Last sign-in: $lastSignIn" -ForegroundColor Red
+            $enrollmentStatus = if ($_.HasMfaEnrolled -eq "Cannot Verify") { " [Status Unknown]" } else { "" }
+            Write-Host "   • $($_.DisplayName) ($($_.UserPrincipalName))$enrollmentStatus - Last sign-in: $lastSignIn" -ForegroundColor Red
         }
         
         if ($HighRiskCount -gt 10) {
@@ -158,10 +190,14 @@ try {
         
         Write-Host "`n🔧 RECOMMENDED ACTIONS:" -ForegroundColor Yellow
         Write-Host "   1. Implement conditional access policy requiring MFA for all users" -ForegroundColor Gray
-        Write-Host "   2. Contact high-risk users to register MFA methods" -ForegroundColor Gray
+        Write-Host "   2. Contact high-risk users to register and use MFA methods" -ForegroundColor Gray
         Write-Host "   3. Consider blocking sign-ins without MFA" -ForegroundColor Gray
+        
+        if ($CannotVerifyCount -gt 0) {
+            Write-Host "   4. Re-grant admin consent to improve enrollment detection accuracy" -ForegroundColor Gray
+        }
     } else {
-        Write-Host "`n✅ No high-risk users found - good MFA coverage" -ForegroundColor Green
+        Write-Host "`n✅ No high-risk users found - excellent MFA coverage!" -ForegroundColor Green
     }
     
     Write-Host "="*60 -ForegroundColor Cyan
@@ -179,6 +215,9 @@ try {
         TotalUsers = $TotalUsers
         HighRiskUsers = $HighRiskCount
         HighRiskPercentage = [math]::Round(($HighRiskCount/$TotalUsers)*100,1)
+        MfaEnrolledUsers = $WithMfaEnrolled
+        MfaEnrolledPercentage = [math]::Round(($WithMfaEnrolled/$TotalUsers)*100,1)
+        EnrollmentVerificationSuccessRate = [math]::Round(($EnrollmentCheckSuccessful/$TotalUsers)*100,1)
         CsvPath = $csvPath
     }
     
