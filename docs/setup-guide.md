@@ -77,7 +77,7 @@ Disconnect-MgGraph
 For each customer tenant you want to audit:
 
 ### **Generate Consent URL**
-Replace `YOUR-APP-ID` with your actual App ID from Step 2:
+Replace `YOUR-APP-ID` with your actual App ID from Step 2, as well as replace `CUSTOMER-DOMAIN`:
 
 ```
 https://login.microsoftonline.com/CUSTOMER-DOMAIN.com/adminconsent?client_id=YOUR-APP-ID&redirect_uri=https://localhost
