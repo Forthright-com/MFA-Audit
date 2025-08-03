@@ -1,4 +1,4 @@
-# Setup App Registration for MFA Audit
+# Setup App Registration for MFA Audit - Updated Version
 # Purpose: One-time setup to create app registration with required permissions
 
 Write-Host "🚀 Setting up MFA Audit App Registration..." -ForegroundColor Cyan
@@ -16,11 +16,12 @@ try {
     
     Write-Host "✅ App registration created: $($App.DisplayName)" -ForegroundColor Green
     
-    # Define required permissions
+    # Define required permissions - UPDATED with UserAuthenticationMethod.Read.All
     $permissions = @(
         @{ Id = "b0afded3-3588-46d8-8b3d-9842eff778da"; Type = "Role" },  # AuditLog.Read.All
         @{ Id = "230c1aed-a721-4c5d-9cb4-a90514e508ef"; Type = "Role" },  # Reports.Read.All
-        @{ Id = "df021288-bdef-4463-88db-98f22de89214"; Type = "Role" }   # User.Read.All
+        @{ Id = "df021288-bdef-4463-88db-98f22de89214"; Type = "Role" },  # User.Read.All
+        @{ Id = "38d9df27-64da-44fd-b7c5-a6fbac20248f"; Type = "Role" }   # UserAuthenticationMethod.Read.All
     )
     
     # Add permissions to the app
@@ -51,11 +52,20 @@ try {
     Write-Host "$($secret.SecretText)" -ForegroundColor White
     Write-Host "="*60 -ForegroundColor Red
     
+    Write-Host "`n📋 PERMISSIONS CONFIGURED:" -ForegroundColor Cyan
+    Write-Host "   • AuditLog.Read.All - Read audit log data" -ForegroundColor Gray
+    Write-Host "   • Reports.Read.All - Read usage reports" -ForegroundColor Gray
+    Write-Host "   • User.Read.All - Read user profiles" -ForegroundColor Gray
+    Write-Host "   • UserAuthenticationMethod.Read.All - Read MFA enrollment status" -ForegroundColor Gray
+    
     Write-Host "`n📋 NEXT STEPS:" -ForegroundColor Cyan
     Write-Host "1. Save the App ID and Client Secret above" -ForegroundColor Gray
     Write-Host "2. Grant admin consent for each customer tenant:" -ForegroundColor Gray
     Write-Host "   https://login.microsoftonline.com/CUSTOMER-DOMAIN.com/adminconsent?client_id=$($App.AppId)&redirect_uri=https://localhost" -ForegroundColor Gray
     Write-Host "3. Run MFA-Audit.ps1 with your saved credentials" -ForegroundColor Gray
+    
+    Write-Host "`n⚠️  IMPORTANT: Customer tenants will need to re-consent due to new permission" -ForegroundColor Yellow
+    Write-Host "   If you have existing customer consents, they must be re-granted." -ForegroundColor Yellow
     
     Write-Host "`n✅ Setup complete! App registration ready for use." -ForegroundColor Green
     
