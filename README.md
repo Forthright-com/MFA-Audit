@@ -1,90 +1,110 @@
-# MSP MFA Audit Tool
+# MFA-Audit
 
-> **Quickly identify high-risk users lacking MFA protection across customer tenants**
+**PowerShell toolkit for auditing multi-factor authentication (MFA) adoption across customer tenants.**
 
-A PowerShell-based audit system for Managed Service Providers (MSPs) to assess Multi-Factor Authentication (MFA) adoption across customer Microsoft 365 tenants.
+Perfect for Managed Service Providers (MSPs) who need to quickly assess security posture and identify high-risk users lacking MFA protection.
 
-## 🎯 What This Does
+## 🎯 **What This Does**
 
-- **Identifies high-risk users** without MFA protection
-- **Audits multiple customer tenants** efficiently
-- **Generates actionable reports** with CSV exports
-- **Scales from single customer to entire client base**
+- **Identifies high-risk users** with no MFA protection across customer tenants
+- **Generates actionable reports** with clear risk categories
+- **Scales to multiple customers** with batch processing
+- **Exports detailed CSV files** for further analysis
+- **Provides clear recommendations** for improving security
 
-## ⚡ Quick Start
-
-1. **Setup** (one-time, 30 minutes)
-   - Run app registration script
-   - Grant consent to customer tenants
-   - Install PowerShell prerequisites
-
-2. **Audit** (2-3 minutes per customer)
-   ```powershell
-   .\Simple-MFA-Audit.ps1 -TenantId "customer.com" -ClientId "your-app-id" -ClientSecret "your-secret" -CustomerName "Contoso Ltd"
-   ```
-
-3. **Results**
-   - Console output with risk breakdown
-   - CSV export with detailed user analysis
-   - Clear action items for each customer
-
-## 📊 Typical Results
-
-- **Customer A**: 156 users, 22 high-risk (14.1%) → Needs MFA policy
-- **Customer B**: 89 users, 2 high-risk (2.2%) → Good coverage  
-- **Customer C**: 234 users, 67 high-risk (28.6%) → URGENT action needed
-
-## 📋 Requirements
-
-- **PowerShell 5.1+** with Microsoft Graph module
-- **Azure AD app registration** with required permissions
-- **Global admin access** to customer tenants for consent
-- **Windows** or **PowerShell Core** on Mac/Linux
-
-## 🚀 Benefits
-
-- **Time Investment**: 30 min setup, 2-3 min per customer audit
-- **Visibility**: Clear picture of MFA adoption across customers
-- **Action Items**: Specific users needing MFA setup
-- **Scalability**: Batch processing for multiple customers
-- **Professional**: CSV reports ready for customer communication
-
-## 📁 Repository Structure
+## 📊 **Typical Results**
 
 ```
-├── scripts/              # PowerShell audit scripts
-├── docs/                 # Setup and usage documentation  
-├── templates/            # Customer communication templates
-└── examples/             # Sample outputs and configurations
+🔍 Starting MFA audit for Contoso Ltd (contoso.com)...
+✅ Connected successfully
+📋 Getting active users... Found 156 active users
+📊 Getting MFA usage data... Found 89 MFA sign-ins in last 30 days
+
+============================================================
+                    MFA AUDIT RESULTS
+                     Contoso Ltd
+============================================================
+📊 SUMMARY:
+   Total Active Users: 156
+   Users with MFA Methods: 134 (85.9%)
+   Users with Recent MFA Usage: 89 (57.1%)
+
+🎯 RISK BREAKDOWN:
+   🟢 Low Risk: 89 (57.1%)
+   🟡 Medium Risk: 45 (28.8%)
+   🔴 High Risk: 22 (14.1%)
+
+🚨 HIGH-RISK USERS (NO MFA PROTECTION):
+   • John Smith (john.smith@contoso.com) - Last sign-in: 07/29/2025
+   • Jane Doe (jane.doe@contoso.com) - Last sign-in: Never
+   • Bob Wilson (bob.wilson@contoso.com) - Last sign-in: 07/25/2025
+============================================================
 ```
 
-## 🛡️ Security Note
+## 🚀 **Quick Start**
 
-This tool requires sensitive permissions. Follow security best practices:
-- Store app secrets securely (Azure Key Vault recommended)
-- Use separate app registration for each MSP
-- Regularly rotate client secrets
-- Monitor app usage through Azure AD logs
+### **Prerequisites**
+- PowerShell with Microsoft Graph module
+- Global admin access to customer tenants
+- One app registration in your MSP tenant
 
-## 📖 Documentation
+### **Setup (5 minutes, one-time)**
+1. Run `Setup-App-Registration.ps1` to create your app
+2. Grant admin consent to customer tenants
+3. Save your App ID and Client Secret
 
-- **[Setup Guide](docs/SETUP.md)** - Initial configuration
-- **[Usage Guide](docs/USAGE.md)** - Running audits
-- **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues
+### **Single Customer Audit**
+```powershell
+.\scripts\MFA-Audit.ps1 -TenantId "customer.com" -ClientId "your-app-id" -ClientSecret "your-secret" -CustomerName "Contoso Ltd"
+```
 
-## 🤝 Contributing
+### **Multiple Customer Audit**
+```powershell
+.\scripts\Multi-Customer-Audit.ps1 -ClientId "your-app-id" -ClientSecret "your-secret"
+```
 
-Improvements welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Submit a pull request
+## 📁 **Files**
 
-## 📄 License
+| File | Purpose |
+|------|---------|
+| `scripts/MFA-Audit.ps1` | Main audit script for single customer |
+| `scripts/Setup-App-Registration.ps1` | One-time app registration setup |
+| `scripts/Multi-Customer-Audit.ps1` | Batch processing multiple customers |
+| `docs/setup-guide.md` | Detailed setup instructions |
+| `examples/` | Sample outputs and templates |
 
-MIT License - see [LICENSE](LICENSE) file for details.
+## 📈 **Risk Categories**
 
----
+- **🔴 High Risk**: No MFA methods AND no recent MFA usage
+- **🟡 Medium Risk**: Has MFA methods but no recent usage  
+- **🟢 Low Risk**: Recent MFA usage (active protection)
 
-**Built for MSPs by MSPs** 🛡️
+## 💡 **Recommended Workflow**
 
-*Secure your customers' identities, one audit at a time.*
+1. **Monday morning**: Run batch audit across all customers
+2. **Review results**: Focus on customers with >10% high-risk users
+3. **Contact customers**: Send high-risk user lists to admins
+4. **Follow up**: Verify MFA policies were implemented
+
+## 🔧 **Requirements**
+
+- **PowerShell 5.1+**
+- **Microsoft.Graph PowerShell module**
+- **App registration** with these permissions:
+  - `AuditLog.Read.All`
+  - `Reports.Read.All` 
+  - `User.Read.All`
+
+## 📖 **Documentation**
+
+- [Detailed Setup Guide](docs/setup-guide.md)
+- [Troubleshooting Guide](docs/troubleshooting.md)
+- [Customer Communication Templates](examples/customer-communication-template.md)
+
+## 🤝 **Contributing**
+
+Feel free to submit issues, feature requests, or pull requests to improve this toolkit.
+
+## ⚖️ **License**
+
+This project is licensed under the MIT License - see the LICENSE file for details.
