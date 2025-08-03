@@ -2,7 +2,7 @@
 
 **PowerShell toolkit for auditing multi-factor authentication (MFA) adoption across customer tenants.**
 
-Perfect for Managed Service Providers (MSPs) who need to quickly assess security posture and identify high-risk users lacking MFA protection.
+Method to quickly assess security posture and identify high-risk users lacking MFA protection.
 
 ## 🎯 **What This Does**
 
