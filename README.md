@@ -2,11 +2,13 @@
 
 **PowerShell toolkit for auditing multi-factor authentication (MFA) adoption across customer tenants.**
 
-Method to quickly assess security posture and identify high-risk users lacking MFA protection.
+Perfect for Managed Service Providers (MSPs) who need to quickly assess security posture and identify high-risk users lacking MFA protection.
 
 ## 🎯 **What This Does**
 
 - **Identifies high-risk users** with no MFA protection across customer tenants
+- **Verifies MFA enrollment status** for each user (enrolled/not enrolled)
+- **Tracks MFA usage patterns** over the last 30 days
 - **Generates actionable reports** with clear risk categories
 - **Scales to multiple customers** with batch processing
 - **Exports detailed CSV files** for further analysis
@@ -26,8 +28,9 @@ Method to quickly assess security posture and identify high-risk users lacking M
 ============================================================
 📊 SUMMARY:
    Total Active Users: 156
-   Users with MFA Methods: 134 (85.9%)
+   Users with MFA Enrolled: 134 (85.9%)
    Users with Recent MFA Usage: 89 (57.1%)
+   ✅ MFA Enrollment Status Verified: 156 users
 
 🎯 RISK BREAKDOWN:
    🟢 Low Risk: 89 (57.1%)
@@ -75,8 +78,8 @@ Method to quickly assess security posture and identify high-risk users lacking M
 
 ## 📈 **Risk Categories**
 
-- **🔴 High Risk**: No MFA methods AND no recent MFA usage
-- **🟡 Medium Risk**: Has MFA methods but no recent usage  
+- **🔴 High Risk**: No MFA methods enrolled OR cannot verify enrollment and no recent usage
+- **🟡 Medium Risk**: Has MFA methods enrolled but no recent usage  
 - **🟢 Low Risk**: Recent MFA usage (active protection)
 
 ## 💡 **Recommended Workflow**
@@ -94,6 +97,30 @@ Method to quickly assess security posture and identify high-risk users lacking M
   - `AuditLog.Read.All`
   - `Reports.Read.All` 
   - `User.Read.All`
+  - `UserAuthenticationMethod.Read.All` *(New - for MFA enrollment detection)*
+
+## 🔐 **Permissions Explained**
+
+| Permission | Purpose | Why Needed |
+|------------|---------|------------|
+| `AuditLog.Read.All` | Read sign-in logs | Detect MFA usage patterns |
+| `Reports.Read.All` | Read usage reports | User activity analysis |
+| `User.Read.All` | Read user profiles | Enumerate active users |
+| `UserAuthenticationMethod.Read.All` | Read MFA enrollment | Verify MFA method registration |
+
+## 🆕 **What's New**
+
+### **Version 2.0 Updates**
+- **Enhanced MFA Detection**: Now directly reads user MFA enrollment status
+- **Improved Accuracy**: Distinguishes between "not enrolled" and "cannot verify"
+- **Better Reporting**: Clear enrollment verification success rates
+- **Updated Permissions**: Added UserAuthenticationMethod.Read.All for enrollment detection
+
+### **Migration from v1.x**
+If you're upgrading from a previous version:
+1. **Update app registration** - Run the new `Setup-App-Registration.ps1`
+2. **Re-grant consent** - Customer tenants need to consent to the new permission
+3. **Update scripts** - Replace existing scripts with new versions
 
 ## 📖 **Documentation**
 
@@ -108,3 +135,35 @@ Feel free to submit issues, feature requests, or pull requests to improve this t
 ## ⚖️ **License**
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+---
+
+## 📋 **CSV Output Fields**
+
+| Field | Description | Values |
+|-------|-------------|---------|
+| `UserPrincipalName` | User's email address | user@domain.com |
+| `DisplayName` | User's full name | John Smith |
+| `JobTitle` | User's role/title | Marketing Manager |
+| `LastSignIn` | Last sign-in date | 2025-01-15T10:30:00Z |
+| `HasMfaEnrolled` | MFA enrollment status | Yes/No/Cannot Verify |
+| `MfaUsedLast30Days` | Recent MFA usage | True/False |
+| `MfaSignInCount` | MFA sign-ins in period | 15 |
+| `RiskLevel` | Security risk assessment | High/Medium/Low |
+| `IsHighRisk` | High-risk flag | True/False |
+
+## 🔍 **Troubleshooting**
+
+### **Common Issues**
+
+**"Insufficient privileges to complete the operation"**
+- **Cause:** Missing UserAuthenticationMethod.Read.All permission
+- **Solution:** Re-run Setup-App-Registration.ps1 and re-grant customer consent
+
+**"Cannot Verify" showing for MFA enrollment**
+- **Cause:** Permission not granted for this customer tenant
+- **Solution:** Re-grant admin consent for the specific customer
+
+**All users showing "No" for MFA enrollment**
+- **Cause:** Customer may not have MFA policies enabled
+- **Solution:** This is accurate data - implement MFA policies for customer
