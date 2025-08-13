@@ -6,7 +6,10 @@ param(
     [string]$ClientId,
     
     [Parameter(Mandatory=$true, HelpMessage="Your app secret")]
-    [string]$ClientSecret
+    [string]$ClientSecret,
+    
+    [Parameter(Mandatory=$false, HelpMessage="Name of group containing MFA-exempt users")]
+    [string]$MfaBypassGroupName = "MFA-Bypass-ServiceAccounts"
 )
 
 Write-Host "🚀 Starting Multi-Customer MFA Audit..." -ForegroundColor Cyan
@@ -29,19 +32,19 @@ foreach ($Customer in $Customers) {
     
     try {
         # Call the main audit script
-        $result = & "$PSScriptRoot\MFA-Audit.ps1" -TenantId $Customer.TenantId -ClientId $ClientId -ClientSecret $ClientSecret -CustomerName $Customer.Name
+        $result = & "$PSScriptRoot\MFA-Audit.ps1" -TenantId $Customer.TenantId -ClientId $ClientId -ClientSecret $ClientSecret -CustomerName $Customer.Name -MfaBypassGroupName $MfaBypassGroupName
         
         if ($result) {
             $Results += $result
             
             # Quick status for each customer
-            $riskColor = switch ($result.HighRiskPercentage) {
+            $statusColor = switch ($result.MfaRequiredPercentage) {
                 { $_ -le 5 } { "Green" }
                 { $_ -le 15 } { "Yellow" }
                 default { "Red" }
             }
             
-            Write-Host "✅ $($Customer.Name): $($result.HighRiskUsers) high-risk users ($($result.HighRiskPercentage)%)" -ForegroundColor $riskColor
+            Write-Host "✅ $($Customer.Name): $($result.MfaRequiredCount) users requiring MFA ($($result.MfaRequiredPercentage)%)" -ForegroundColor $statusColor
         } else {
             throw "Audit returned null result"
         }
@@ -62,34 +65,57 @@ foreach ($Customer in $Customers) {
 # Generate overall summary
 if ($Results.Count -gt 0) {
     $TotalUsers = ($Results | Measure-Object TotalUsers -Sum).Sum
-    $TotalHighRisk = ($Results | Measure-Object HighRiskUsers -Sum).Sum
-    $OverallPercentage = if ($TotalUsers -gt 0) { [math]::Round(($TotalHighRisk/$TotalUsers)*100,1) } else { 0 }
+    $TotalMfaRequired = ($Results | Measure-Object MfaRequiredCount -Sum).Sum
+    $TotalMfaActive = ($Results | Measure-Object MfaActiveCount -Sum).Sum
+    $TotalMfaInactive = ($Results | Measure-Object MfaInactiveCount -Sum).Sum
+    $TotalMfaExempted = ($Results | Measure-Object MfaExemptedCount -Sum).Sum
+    $TotalMfaUnknown = ($Results | Measure-Object MfaUnknownCount -Sum).Sum
+    $OverallRequiredPercentage = if ($TotalUsers -gt 0) { [math]::Round(($TotalMfaRequired/$TotalUsers)*100,1) } else { 0 }
     
     Write-Host "`n" + "="*60 -ForegroundColor Cyan
     Write-Host "              📊 OVERALL SUMMARY" -ForegroundColor Cyan
     Write-Host "="*60 -ForegroundColor Cyan
     Write-Host "Customers Successfully Audited: $($Results.Count)" -ForegroundColor White
     Write-Host "Total Users Across All Customers: $TotalUsers" -ForegroundColor White
-    Write-Host "Total High-Risk Users: $TotalHighRisk ($OverallPercentage%)" -ForegroundColor White
+    Write-Host ""
+    Write-Host "OVERALL MFA STATUS:" -ForegroundColor White
+    Write-Host "   ✅ MFA Active: $TotalMfaActive ($([math]::Round(($TotalMfaActive/$TotalUsers)*100,1))%)" -ForegroundColor Green
+    Write-Host "   ⚠️ MFA Required: $TotalMfaRequired ($OverallRequiredPercentage%)" -ForegroundColor Red
+    Write-Host "   🟡 MFA Inactive: $TotalMfaInactive ($([math]::Round(($TotalMfaInactive/$TotalUsers)*100,1))%)" -ForegroundColor Yellow
+    Write-Host "   🔒 MFA Exempted: $TotalMfaExempted ($([math]::Round(($TotalMfaExempted/$TotalUsers)*100,1))%)" -ForegroundColor Blue
+    Write-Host "   ❓ MFA Unknown: $TotalMfaUnknown ($([math]::Round(($TotalMfaUnknown/$TotalUsers)*100,1))%)" -ForegroundColor Magenta
     
     # Show customers needing immediate attention
-    $CustomersNeedingAttention = $Results | Where-Object { $_.HighRiskPercentage -gt 10 } | Sort-Object HighRiskPercentage -Descending
+    $CustomersNeedingAttention = $Results | Where-Object { $_.MfaRequiredPercentage -gt 10 } | Sort-Object MfaRequiredPercentage -Descending
     if ($CustomersNeedingAttention.Count -gt 0) {
-        Write-Host "`n🚨 CUSTOMERS NEEDING IMMEDIATE ATTENTION:" -ForegroundColor Red
+        Write-Host "`n⚠️ CUSTOMERS NEEDING IMMEDIATE ATTENTION:" -ForegroundColor Red
         $CustomersNeedingAttention | ForEach-Object {
-            Write-Host "   • $($_.CustomerName): $($_.HighRiskUsers) high-risk users ($($_.HighRiskPercentage)%)" -ForegroundColor Red
+            Write-Host "   • $($_.CustomerName): $($_.MfaRequiredCount) users requiring MFA ($($_.MfaRequiredPercentage)%)" -ForegroundColor Red
         }
         
-        Write-Host "`n📧 Consider sending MFA security alerts to these customers immediately." -ForegroundColor Yellow
+        Write-Host "`n🔧 Consider prioritizing MFA enrollment campaigns for these customers." -ForegroundColor Yellow
     }
     
     # Show customers with good MFA coverage
-    $GoodCoverage = $Results | Where-Object { $_.HighRiskPercentage -le 5 }
+    $GoodCoverage = $Results | Where-Object { $_.MfaRequiredPercentage -le 5 }
     if ($GoodCoverage.Count -gt 0) {
         Write-Host "`n✅ CUSTOMERS WITH GOOD MFA COVERAGE:" -ForegroundColor Green
         $GoodCoverage | ForEach-Object {
-            Write-Host "   • $($_.CustomerName): $($_.HighRiskUsers) high-risk users ($($_.HighRiskPercentage)%)" -ForegroundColor Green
+            Write-Host "   • $($_.CustomerName): $($_.MfaRequiredCount) users requiring MFA ($($_.MfaRequiredPercentage)%)" -ForegroundColor Green
         }
+    }
+    
+    # Show customers with inactive MFA users
+    $InactiveUsers = $Results | Where-Object { $_.MfaInactiveCount -gt 0 } | Sort-Object MfaInactiveCount -Descending
+    if ($InactiveUsers.Count -gt 0) {
+        Write-Host "`n🟡 CUSTOMERS WITH INACTIVE MFA USERS:" -ForegroundColor Yellow
+        $InactiveUsers | Select-Object -First 5 | ForEach-Object {
+            Write-Host "   • $($_.CustomerName): $($_.MfaInactiveCount) inactive MFA users" -ForegroundColor Yellow
+        }
+        if ($InactiveUsers.Count -gt 5) {
+            Write-Host "   ... and $($InactiveUsers.Count - 5) more customers with inactive users" -ForegroundColor Yellow
+        }
+        Write-Host "   Consider reviewing conditional access policies for these customers" -ForegroundColor Gray
     }
     
     Write-Host "="*60 -ForegroundColor Cyan
