@@ -28,7 +28,7 @@ Run the setup script to create your app registration:
 
 This script will:
 - Create an app registration named "MSP-MFA-Audit"
-- Add required permissions (AuditLog.Read.All, Reports.Read.All, User.Read.All)
+- Add required permissions (AuditLog.Read.All, Reports.Read.All, User.Read.All, UserAuthenticationMethod.Read.All)
 - Generate a client secret valid for 24 months
 - Display your App ID and Client Secret
 
@@ -49,7 +49,8 @@ $App = New-MgApplication -DisplayName "MSP-MFA-Audit" -SignInAudience "AzureADMu
 $permissions = @(
     @{ Id = "b0afded3-3588-46d8-8b3d-9842eff778da"; Type = "Role" },  # AuditLog.Read.All
     @{ Id = "230c1aed-a721-4c5d-9cb4-a90514e508ef"; Type = "Role" },  # Reports.Read.All
-    @{ Id = "df021288-bdef-4463-88db-98f22de89214"; Type = "Role" }   # User.Read.All
+    @{ Id = "df021288-bdef-4463-88db-98f22de89214"; Type = "Role" },  # User.Read.All
+    @{ Id = "38d9df27-64da-44fd-b7c5-a6fbac20248f"; Type = "Role" }   # UserAuthenticationMethod.Read.All
 )
 
 Update-MgApplication -ApplicationId $App.Id -RequiredResourceAccess @(@{
@@ -94,6 +95,7 @@ https://login.microsoftonline.com/CUSTOMER-DOMAIN.com/adminconsent?client_id=YOU
 - **AuditLog.Read.All**: Read audit log data (required for MFA sign-in analysis)
 - **Reports.Read.All**: Read usage reports (required for user activity)
 - **User.Read.All**: Read user profiles (required for user enumeration)
+- **UserAuthenticationMethod.Read.All**: Read MFA enrollment status (required for enrollment detection)
 
 ---
 
@@ -119,9 +121,10 @@ Start with one customer to verify everything works:
 ```
 🔍 Starting MFA audit for Test Customer (customer.com)...
 ✅ Connected successfully
+🔒 Checking for MFA exemption group... Found exemption group with 3 members
 📋 Getting active users... Found 156 active users
 📊 Getting MFA usage data... Found 89 MFA sign-ins in last 30 days
-🔍 Analyzing users for MFA risk...
+🔍 Analyzing users for MFA status...
 
 ============================================================
                     MFA AUDIT RESULTS
@@ -129,13 +132,20 @@ Start with one customer to verify everything works:
 ============================================================
 📊 SUMMARY:
    Total Active Users: 156
-   Users with MFA Methods: 134 (85.9%)
+   Users with MFA Enrolled: 134 (85.9%)
    Users with Recent MFA Usage: 89 (57.1%)
+   ✅ MFA Enrollment Status Verified: 156 users
 
-🎯 RISK BREAKDOWN:
-   🟢 Low Risk: 89 (57.1%)
-   🟡 Medium Risk: 45 (28.8%)
-   🔴 High Risk: 22 (14.1%)
+🎯 MFA STATUS BREAKDOWN:
+   ✅ MFA Active: 89 (57.1%)
+   ⚠️ MFA Required: 22 (14.1%)
+   🟡 MFA Inactive: 42 (26.9%)
+   🔒 MFA Exempted: 3 (1.9%)
+   ❓ MFA Unknown: 0 (0.0%)
+
+⚠️ USERS REQUIRING MFA ENROLLMENT:
+   • John Smith (john.smith@customer.com) - Last sign-in: 07/29/2025
+   • Jane Doe (jane.doe@customer.com) - Last sign-in: Never
 
 📄 Full results exported to: .\MFA_Audit_Test_Customer_20250731_1430.csv
 ```
@@ -223,27 +233,29 @@ Disconnect-MgGraph
 
 ## 📊 **Understanding the Results**
 
-### **Risk Categories**
-- **🔴 High Risk**: No MFA methods AND no recent MFA usage (immediate action required)
-- **🟡 Medium Risk**: Has MFA methods but no recent usage (policy enforcement needed)
-- **🟢 Low Risk**: Recent MFA usage (good security posture)
+### **MFA Status Categories**
+- **✅ MFA Active**: Users who have MFA enrolled and used it recently (good security posture)
+- **⚠️ MFA Required**: Users with no MFA methods enrolled (immediate action required)
+- **🟡 MFA Inactive**: Users who have MFA enrolled but haven't used it recently (policy enforcement needed)
+- **🔒 MFA Exempted**: Users intentionally excluded via group membership (service accounts, etc.)
+- **❓ MFA Unknown**: Cannot verify enrollment status (permission/API issues)
 
 ### **Key Metrics**
 - **Total Active Users**: Internal users with active accounts
-- **Users with MFA Methods**: Users who have enrolled MFA methods
+- **Users with MFA Enrolled**: Users who have registered MFA methods
 - **Users with Recent MFA Usage**: Users who've used MFA in the last 30 days
-- **High-Risk Percentage**: % of users with no MFA protection
+- **MFA Required Percentage**: % of users needing MFA enrollment
 
 ### **CSV Export Fields**
 - `UserPrincipalName`: User's email address
 - `DisplayName`: User's full name
 - `JobTitle`: User's role/title
 - `LastSignIn`: Last sign-in date
-- `HasMfaMethods`: TRUE if user has MFA methods enrolled
-- `RecentMfaUsage`: TRUE if user used MFA in last 30 days
+- `HasMfaEnrolled`: Yes/No/Cannot Verify - MFA enrollment status
+- `MfaUsedLast30Days`: TRUE if user used MFA in last 30 days
 - `MfaSignInCount`: Number of MFA sign-ins in period
-- `RiskLevel`: High/Medium/Low risk assessment
-- `IsHighRisk`: TRUE for high-risk users
+- `RecentlyCreated`: TRUE if account was created within last 15 days
+- `MfaStatus`: Current MFA status (Active/Required/Inactive/Exempted/Unknown)
 
 ---
 
@@ -251,21 +263,21 @@ Disconnect-MgGraph
 
 ### **Initial Baseline**
 After your first round of audits, you should have:
-- **Customer risk assessment** for each tenant
-- **High-risk user counts** for prioritization
+- **Customer MFA assessment** for each tenant
+- **Users requiring enrollment counts** for prioritization
 - **Baseline metrics** for tracking improvement
 
 ### **Ongoing Tracking**
 Week over week, track:
-- **Reduction in high-risk users**
+- **Reduction in users requiring MFA enrollment**
 - **Increase in MFA method enrollment**
 - **Improvement in MFA usage rates**
 - **Customer policy implementation**
 
 ### **Target Goals**
-- **<5% high-risk users** per customer (excellent)
-- **<10% high-risk users** per customer (good)
-- **>15% high-risk users** per customer (needs immediate attention)
+- **<5% users requiring MFA enrollment** per customer (excellent)
+- **<10% users requiring MFA enrollment** per customer (good)
+- **>15% users requiring MFA enrollment** per customer (needs immediate attention)
 
 ---
 
